@@ -50,6 +50,34 @@ app.post("/notify", auth, async (req, res) => {
     res.json({ ok: true, id: json.id });
   } catch (e) {
     console.error(e);
+
+
+
+
+
+
+
+    const admin = require('firebase-admin');
+admin.initializeApp({ /* بيانات الاعتماد */ });
+
+const db = admin.firestore();
+
+// الاستماع المباشر للتغيرات في مجموعة الطلبات
+db.collection('orders').onSnapshot(snapshot => {
+  snapshot.docChanges().forEach(change => {
+    if (change.type === 'modified') {
+      const order = change.doc.data();
+      // إذا تغيرت الحالة إلى Finish، يتم استدعاء دالة الإرسال تلقائياً
+      if (order.status === 'Finish') {
+        sendPush({
+          uid: order.client.uID,
+          title: 'اكتمل الطلب 🍔',
+          body: 'تم توصيل طلبك بنجاح!'
+        });
+      }
+    }
+  });
+});
     res.status(500).json({ error: "send failed" });
   }
 });
