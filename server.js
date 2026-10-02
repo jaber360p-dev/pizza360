@@ -67,7 +67,7 @@ async function sendPush({
     body: JSON.stringify({
       app_id: ONESIGNAL_APP_ID,
       target_channel: "push",
-      include_aliases : @{ external_id = @("cmazqPXZGodQ1WSdxmkjIi7Xm1s2") },
+      include_aliases: { external_id: ["cmazqPXZGodQ1WSdxmkjIi7Xm1s2"] },
       headings: { en: title, ar: title },
       contents: { en: body, ar: body },
       data: { type, orderId, ...extra },
