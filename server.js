@@ -7,6 +7,8 @@ app.use(express.json());
 const {
   ONESIGNAL_APP_ID,
   ONESIGNAL_REST_API_KEY,
+  ONESIGNAL_OWNER_APP_ID,
+  ONESIGNAL_OWNER_REST_API_KEY,
   RELAY_SECRET,
   FIREBASE_SERVICE_ACCOUNT,
   OWNER_UID,
@@ -46,6 +48,7 @@ if (FIREBASE_SERVICE_ACCOUNT) {
 const db = admin.apps.length ? admin.firestore() : null;
 
 // 2. دالة موحدة لإرسال الإشعارات عبر OneSignal
+// 2. إرسال عبر OneSignal: audience = "client" أو "owner"
 async function sendPush({
   uid,
   title,
@@ -53,21 +56,26 @@ async function sendPush({
   type = "order",
   orderId = "",
   extra = {},
+  audience = "client",
 }) {
   if (!uid || !title || !body) {
     throw new Error("uid, title and body are required");
   }
 
+  const isOwner = audience === "owner";
+  const appId = isOwner ? ONESIGNAL_OWNER_APP_ID : ONESIGNAL_APP_ID;
+  const apiKey = isOwner ? ONESIGNAL_OWNER_REST_API_KEY : ONESIGNAL_REST_API_KEY;
+
   const response = await fetch("https://api.onesignal.com/notifications?c=push", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Key ${ONESIGNAL_REST_API_KEY}`,
+      Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify({
-      app_id: ONESIGNAL_APP_ID,
+      app_id: appId,
       target_channel: "push",
-      include_aliases: { external_id: ["cmazqPXZGodQ1WSdxmkjIi7Xm1s2"] },
+      include_aliases: { external_id: [uid] },
       headings: { en: title, ar: title },
       contents: { en: body, ar: body },
       data: { type, orderId, ...extra },
@@ -76,16 +84,16 @@ async function sendPush({
   });
 
   const json = await response.json();
+  // OneSignal يرجع 200 حتى مع alias غير صالح: نفحص errors صراحة
   if (!response.ok || json.errors) {
-    console.error("❌ OneSignal API Error:", response.status, JSON.stringify(json));
+    console.error(`❌ OneSignal (${audience}) error:`, response.status, JSON.stringify(json));
     throw new Error(JSON.stringify(json));
   }
 
-  console.log(`✅ Notification sent to ${uid}:`, json.id);
+  console.log(`✅ Notification sent (${audience}) to ${uid}:`, json.id);
   return json;
 }
 
-// إرسال لكل المالكين مع عدم إيقاف الباقي إن فشل أحدهم
 async function notifyOwners(payload) {
   if (!OWNER_UIDS.length) {
     console.warn("⚠️ OWNER_UID is not set: owner notification skipped");
@@ -93,7 +101,7 @@ async function notifyOwners(payload) {
   }
   for (const uid of OWNER_UIDS) {
     try {
-      await sendPush({ uid, ...payload });
+      await sendPush({ uid, audience: "owner", ...payload });
     } catch (err) {
       console.error(`❌ Error notifying owner ${uid}:`, err.message);
     }
